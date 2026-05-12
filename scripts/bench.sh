@@ -196,8 +196,12 @@ META_FILE="${RESULTS_DIR}/env.txt"
 } > "${META_FILE}"
 
 echo "==> results in: ${RESULTS_DIR}"
-echo "==> running variants: ${SELECTED[@]/#/${VARIANT_NAMES[}}"
-echo "==> reps=${REPS}, pp=${PP}, tg=${TG}, perf=${HAVE_PERF}, numactl=${HAVE_NUMACTL}"
+SELECTED_NAMES=""
+for idx in "${SELECTED[@]}"; do
+    SELECTED_NAMES+="${VARIANT_NAMES[$idx]} "
+done
+echo "==> running variants: ${SELECTED_NAMES}"
+echo "==> reps=${REPS}, pp=${PP}, tg=${TG}, perf=${HAVE_PERF}, numactl=${HAVE_NUMACTL}, instrument=${HAVE_INSTRUMENT}"
 echo
 
 # Per-variant runner
