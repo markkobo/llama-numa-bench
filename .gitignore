@@ -1,0 +1,28 @@
+# models
+*.gguf
+*.bin
+*.safetensors
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~
+
+# build / scratch
+/build/
+/dist/
+*.tmp
+
+# secrets
+.env
+.envrc
+*.pem
