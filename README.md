@@ -50,22 +50,46 @@ data as it accumulates.
   exact command line. Plus a per-run `env.txt` with kernel, git SHA, model
   SHA-256, NUMA topology, THP state.
 
-## Reproducing
+## Reproducing on AWS c7a.32xlarge
 
-Scripts currently live in the working fork at
-`markkobo/llama.cpp:main/scripts/` and will migrate here once Stage 0 ships.
-
-In brief:
+One bootstrap script, then four commands. Total wall time ~16–22 h
+(~5–15 min model download + ~10 min build + ~15–20 hr bench).
+Cost: ~$108–120 on-demand.
 
 ```bash
-# in your llama.cpp checkout
+# on a fresh c7a.32xlarge (Ubuntu 24.04), pull and read the bootstrap script first
+curl -sSL https://raw.githubusercontent.com/markkobo/llama-numa-bench/main/scripts/c7a_bootstrap.sh -o /tmp/boot.sh
+less /tmp/boot.sh                # always read before piping shell scripts
+bash /tmp/boot.sh                # installs deps, clones both repos, wires scripts
+
+# inside tmux (so SSH disconnect doesn't kill the 20-hr bench)
+tmux new -s bench
+
+# follow the printed next-steps. Summary:
+curl -L -C - -o ~/models/mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf \
+    https://huggingface.co/TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF/resolve/main/mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf
+cd ~/llama.cpp
 ./main/scripts/build.sh
-./main/scripts/bench.sh --model /path/to/mixtral.Q4_K_M.gguf --smoke    # validate harness
-./main/scripts/bench.sh --model /path/to/mixtral.Q4_K_M.gguf            # the real run
+./main/scripts/test.sh
+./main/scripts/bench.sh --model ~/models/mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf --smoke
+./main/scripts/bench.sh --model ~/models/mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf
 ./main/scripts/analyze.py main/results/baseline-<timestamp>/
 ```
 
-Each variant's directory ends up here as `results/<stage-tag>/<variant>/`.
+Each variant's directory then gets committed here under
+`results/<stage-tag>/<variant>/`.
+
+## Running locally (single-NUMA dev box)
+
+For harness validation without paying the c7a hourly:
+
+```bash
+./scripts/build.sh
+./scripts/bench.sh --model /path/to/mixtral.Q4_K_M.gguf --smoke
+```
+
+Single-NUMA boxes silently skip the two `numactl`-prefixed variants
+(`interleave`, `bind0`); the other three still run.
 
 ## License
 
