@@ -17,7 +17,10 @@ THREADS=""
 RESULTS_DIR=""
 SMOKE=0
 SKIP_PERF=0
+SKIP_INSTRUMENT=0
+WARMUP_SEC=60
 VARIANTS_FILTER=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
     cat <<EOF
@@ -44,8 +47,10 @@ Options:
   --tg N               Generated tokens for token-generation test (default: ${TG}).
   --threads N          llama-bench -t. Defaults to llama-bench's auto.
   --variants v1,v2     Only run named variants (comma-separated). Default: all 5.
-  --smoke              Quick mode: reps=5, no perf. For harness validation only.
+  --smoke              Quick mode: reps=5, no perf, no instrument. For harness validation only.
   --no-perf            Skip perf stat side-recording (useful if perf perms unavailable).
+  --no-instrument      Skip mid-variant snapshots (threads/numa_maps/kernel counters).
+  --warmup-sec N       Seconds after launching llama-bench before snapshots (default: ${WARMUP_SEC}).
   --results-dir DIR    Override output dir (default: results/baseline-<timestamp>).
   -h, --help           Show this help.
 
@@ -66,6 +71,8 @@ while [[ $# -gt 0 ]]; do
         --variants) VARIANTS_FILTER="$2"; shift 2 ;;
         --smoke) SMOKE=1; shift ;;
         --no-perf) SKIP_PERF=1; shift ;;
+        --no-instrument) SKIP_INSTRUMENT=1; shift ;;
+        --warmup-sec) WARMUP_SEC="$2"; shift 2 ;;
         --results-dir) RESULTS_DIR="$2"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
         *) echo "unknown arg: $1" >&2; usage; exit 2 ;;
@@ -86,9 +93,23 @@ fi
 
 # Smoke mode overrides
 if [[ ${SMOKE} -eq 1 ]]; then
-    echo "==> SMOKE mode: reps=5, no perf"
+    echo "==> SMOKE mode: reps=5, no perf, no instrument"
     REPS=5
     SKIP_PERF=1
+    SKIP_INSTRUMENT=1
+fi
+
+# Resolve instrumentation availability
+HAVE_INSTRUMENT=0
+if [[ ${SKIP_INSTRUMENT} -eq 0 ]]; then
+    if [[ -x "${SCRIPT_DIR}/snapshot_thread_domains.py" && \
+          -x "${SCRIPT_DIR}/snapshot_numa_maps.py" && \
+          -x "${SCRIPT_DIR}/snapshot_kernel_counters.sh" ]]; then
+        HAVE_INSTRUMENT=1
+    else
+        echo "NOTE: snapshot scripts not all executable; mid-variant snapshots disabled." >&2
+        echo "      checked: ${SCRIPT_DIR}/snapshot_*" >&2
+    fi
 fi
 
 # Resolve perf availability
@@ -242,14 +263,66 @@ run_variant() {
     echo "  [${name}] starting (logs: ${outdir}/)"
     local t0
     t0=$(date +%s)
-    if "${full_cmd[@]}" > "${bench_out}" 2> "${stderr_out}"; then
-        local dt=$(( $(date +%s) - t0 ))
+
+    # Snapshot kernel counters BEFORE this variant
+    if [[ ${HAVE_INSTRUMENT} -eq 1 ]]; then
+        "${SCRIPT_DIR}/snapshot_kernel_counters.sh" --out "${outdir}/kcounters_start.json" || \
+            echo "  [${name}] (kcounters_start failed; continuing)" >&2
+    fi
+
+    # Launch the bench (perf-wrapped, maybe numactl-prefixed) in background
+    "${full_cmd[@]}" > "${bench_out}" 2> "${stderr_out}" &
+    local bg_pid=$!
+
+    # Mid-variant snapshots: wait for llama-bench warmup, then capture state
+    if [[ ${HAVE_INSTRUMENT} -eq 1 ]]; then
+        (
+            # Sleep, then find the llama-bench grandchild via pgrep
+            sleep "${WARMUP_SEC}"
+            # Verify the bench is still running
+            if ! kill -0 "${bg_pid}" 2>/dev/null; then
+                echo "  [${name}] (bench finished before warmup snapshot)" >&2
+                exit 0
+            fi
+            local llama_pid
+            llama_pid=$(pgrep -nf "${LLAMA_BENCH}" 2>/dev/null || true)
+            if [[ -z "${llama_pid}" ]]; then
+                echo "  [${name}] (could not pgrep llama-bench for snapshot)" >&2
+                exit 0
+            fi
+            "${SCRIPT_DIR}/snapshot_thread_domains.py" --pid "${llama_pid}" \
+                --out "${outdir}/threads.json" 2> "${outdir}/threads.err" || \
+                echo "  [${name}] (threads snapshot failed)" >&2
+            "${SCRIPT_DIR}/snapshot_numa_maps.py" --pid "${llama_pid}" \
+                --model "${MODEL}" --out "${outdir}/numa_maps.json" \
+                2> "${outdir}/numa_maps.err" || \
+                echo "  [${name}] (numa_maps snapshot failed)" >&2
+            "${SCRIPT_DIR}/snapshot_kernel_counters.sh" --pid "${llama_pid}" \
+                --out "${outdir}/kcounters_mid.json" || \
+                echo "  [${name}] (kcounters_mid failed)" >&2
+        ) &
+        local snap_pid=$!
+    fi
+
+    # Wait for the bench
+    local rc=0
+    wait "${bg_pid}" || rc=$?
+    # Wait for the snapshot subshell too (it may have backgrounded; harmless)
+    if [[ ${HAVE_INSTRUMENT} -eq 1 ]] && [[ -n "${snap_pid:-}" ]]; then
+        wait "${snap_pid}" 2>/dev/null || true
+    fi
+
+    # Snapshot kernel counters AFTER this variant
+    if [[ ${HAVE_INSTRUMENT} -eq 1 ]]; then
+        "${SCRIPT_DIR}/snapshot_kernel_counters.sh" --out "${outdir}/kcounters_end.json" || \
+            echo "  [${name}] (kcounters_end failed; continuing)" >&2
+    fi
+
+    local dt=$(( $(date +%s) - t0 ))
+    if [[ ${rc} -eq 0 ]]; then
         echo "  [${name}] done in ${dt}s"
     else
-        local rc=$?
-        local dt=$(( $(date +%s) - t0 ))
         echo "  [${name}] FAILED rc=${rc} after ${dt}s (see ${stderr_out})" >&2
-        # Don't bail — let other variants try
         return ${rc}
     fi
 }

@@ -47,8 +47,23 @@ data as it accumulates.
 - **Co-measurement:** `perf stat -e
   task-clock,context-switches,cpu-migrations,cycles,instructions,branches,branch-misses,node-load-misses,node-loads,dTLB-load-misses,LLC-load-misses,LLC-loads`.
 - **Output per variant:** JSONL bench results, `perf.log`, captured stderr,
-  exact command line. Plus a per-run `env.txt` with kernel, git SHA, model
-  SHA-256, NUMA topology, THP state.
+  exact command line, plus four external snapshots:
+  - `threads.json` — per-worker NUMA affinity + last CPU + context-switch counts
+  - `numa_maps.json` — per-VMA page placement by node, by buffer category
+    (`model_mmap`, `anon`, `code_libs`, `special`)
+  - `kcounters_start.json` + `kcounters_end.json` — `/proc/vmstat` deltas
+    showing kernel auto-balance activity during the variant
+  - `kcounters_mid.json` — mid-run snapshot including per-process context
+    switches
+
+  Plus a per-run `env.txt` with kernel, git SHA, model SHA-256, NUMA
+  topology, THP state.
+
+  All snapshots are produced by external Python/bash reading `/proc` and
+  `/sys` — **zero changes to llama.cpp itself**. The Stage 1.5 upstream PR
+  will reimplement these as a built-in `--numa-diagnostics` flag; until
+  then, external scripts give the same data without contaminating the
+  baseline.
 
 ## Reproducing on AWS c7a.32xlarge
 
