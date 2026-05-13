@@ -1,0 +1,24 @@
+# started on Tue May 12 05:43:01 2026
+
+
+ Performance counter stats for '/home/rding/llama.cpp/build/bin/llama-bench -m /home/rding/models/Qwen3-30B-A3B-Q4_K_M.gguf -p 512 -n 128 -r 1000 --output jsonl':
+
+921,756,442,452,159      task-clock                       #  127.043 CPUs utilized             
+         7,428,739      context-switches                 #    8.059 /sec                      
+            74,920      cpu-migrations                   #    0.081 /sec                      
+3,322,374,050,171,686      cycles                           #    3.604 GHz                       
+955,077,987,808,830      instructions                     #    0.29  insn per cycle            
+86,384,460,143,653      branches                         #   93.717 M/sec                     
+   333,386,775,930      branch-misses                    #    0.39% of all branches           
+   <not supported>      node-load-misses                                                      
+   <not supported>      node-loads                                                            
+   349,515,411,737      dTLB-load-misses                                                      
+   <not supported>      LLC-load-misses                                                       
+   <not supported>      LLC-loads                                                             
+
+    7255.440345730 seconds time elapsed
+
+  917129.642472000 seconds user
+    4513.577956000 seconds sys
+
+

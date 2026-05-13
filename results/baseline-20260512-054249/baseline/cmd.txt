@@ -1,0 +1,6 @@
+# variant: baseline
+# numactl prefix: ''
+# --numa: ''
+# generated: 2026-05-12T05:43:00+00:00
+
+perf stat -e task-clock\,context-switches\,cpu-migrations\,cycles\,instructions\,branches\,branch-misses\,node-load-misses\,node-loads\,dTLB-load-misses\,LLC-load-misses\,LLC-loads -o /home/rding/llama.cpp/main/results/baseline-20260512-054249/baseline/perf.log -- /home/rding/llama.cpp/build/bin/llama-bench -m /home/rding/models/Qwen3-30B-A3B-Q4_K_M.gguf -p 512 -n 128 -r 1000 --output jsonl 
