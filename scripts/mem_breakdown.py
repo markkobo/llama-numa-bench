@@ -4,8 +4,8 @@ mem_breakdown.py — How much of a loaded GGUF model lives in mmap'd file region
 vs anonymous (heap/ggml) buffers? This decides where the mbind PoC needs to land.
 
 Usage:
-    mem_breakdown.py --bin ./build/bin/llama-bench --model mixtral.Q4_K_M.gguf
-    mem_breakdown.py --bin ./build/bin/llama-bench --model mixtral.Q4_K_M.gguf --no-mmap
+    mem_breakdown.py --bin ./build/bin/llama-bench --model Qwen3-30B-A3B-Q4_K_M.gguf
+    mem_breakdown.py --bin ./build/bin/llama-bench --model Qwen3-30B-A3B-Q4_K_M.gguf --no-mmap
     mem_breakdown.py --bin ./build/bin/llama-bench --model m.gguf --bench-args="-p 512 -n 128 -r 1"
 
 What it does:

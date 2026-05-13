@@ -25,17 +25,27 @@ changes can be argued from data rather than intuition.
 
 ## Status
 
-**v0.1 — skeleton.** Stage 0 baseline datasets land here once measured on
-AWS c7a.32xlarge. See [`results/`](results/) for protocol notes and the
-data as it accumulates.
+**v0.2 — first partial results.** Stage 0 baseline data from rding-bench
+(AMD EPYC 9R14, 128 vCPU, dual-NUMA, 256 GiB) under
+[`results/baseline-20260512-054249/`](results/baseline-20260512-054249/).
+Two of five NUMA variants complete; see commit history and the
+[per-results README](results/README.md) for what shipped when.
 
 ## Stage 0 protocol (summary)
 
-- **Hardware:** AWS c7a.32xlarge — dual-socket AMD EPYC Zen 4, 192 vCPU,
-  two NUMA nodes.
-- **Model:** Mixtral 8x7B Q4_K_M
-  ([TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF](https://huggingface.co/TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF)),
-  ~24.6 GiB.
+- **Hardware:** dual-socket AMD EPYC Zen 4 (AMD EPYC 9R14 verified on
+  rding-bench; equivalent c7a.32xlarge spec also works). 128+ vCPU,
+  two NUMA nodes, ≥128 GiB RAM per node.
+- **Model:** Qwen3-30B-A3B Q4_K_M
+  ([unsloth/Qwen3-30B-A3B-GGUF](https://huggingface.co/unsloth/Qwen3-30B-A3B-GGUF)),
+  ~17.3 GiB. 30B total params, 3B active, 128 experts top-8 — a current
+  sparse-MoE design well-suited to per-expert NUMA-skew analysis. SHA-256:
+  `9f1a24700a339b09c06009b729b5c809e0b64c213b8af5b711b3dbdfd0c5ba48`.
+  (The roadmap originally named Mixtral 8x7B Q4_K_M; pivoted on 2026-05-12
+  because available Mixtral GGUFs use the pre-stacked-experts tensor
+  layout that current llama.cpp master no longer accepts. Qwen3-30B-A3B
+  is both currently supported and more representative of where sparse MoE
+  is heading.)
 - **Workload:** `llama-bench -p 512 -n 128 -r 1000` (one thousand reps of
   prompt-processing-512 and token-generation-128).
 - **Variants (5):**
@@ -81,13 +91,13 @@ bash /tmp/boot.sh                # installs deps, clones both repos, wires scrip
 tmux new -s bench
 
 # follow the printed next-steps. Summary:
-curl -L -C - -o ~/models/mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf \
-    https://huggingface.co/TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF/resolve/main/mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf
+curl -L -C - -o ~/models/Qwen3-30B-A3B-Q4_K_M.gguf \
+    https://huggingface.co/unsloth/Qwen3-30B-A3B-GGUF/resolve/main/Qwen3-30B-A3B-Q4_K_M.gguf
 cd ~/llama.cpp
 ./main/scripts/build.sh
 ./main/scripts/test.sh
-./main/scripts/bench.sh --model ~/models/mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf --smoke
-./main/scripts/bench.sh --model ~/models/mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf
+./main/scripts/bench.sh --model ~/models/Qwen3-30B-A3B-Q4_K_M.gguf --smoke
+./main/scripts/bench.sh --model ~/models/Qwen3-30B-A3B-Q4_K_M.gguf
 ./main/scripts/analyze.py main/results/baseline-<timestamp>/
 ```
 
@@ -100,7 +110,7 @@ For harness validation without paying the c7a hourly:
 
 ```bash
 ./scripts/build.sh
-./scripts/bench.sh --model /path/to/mixtral.Q4_K_M.gguf --smoke
+./scripts/bench.sh --model /path/to/Qwen3-30B-A3B-Q4_K_M.gguf --smoke
 ```
 
 Single-NUMA boxes silently skip the two `numactl`-prefixed variants

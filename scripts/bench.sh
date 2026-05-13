@@ -55,9 +55,9 @@ Options:
   -h, --help           Show this help.
 
 Example:
-  $(basename "$0") --model /data/mixtral.Q4_K_M.gguf --reps 1000
-  $(basename "$0") --model /data/mixtral.Q4_K_M.gguf --smoke
-  $(basename "$0") --model /data/mixtral.Q4_K_M.gguf --variants baseline,distribute
+  $(basename "$0") --model /data/Qwen3-30B-A3B-Q4_K_M.gguf --reps 1000
+  $(basename "$0") --model /data/Qwen3-30B-A3B-Q4_K_M.gguf --smoke
+  $(basename "$0") --model /data/Qwen3-30B-A3B-Q4_K_M.gguf --variants baseline,distribute
 EOF
 }
 

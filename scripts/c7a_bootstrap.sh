@@ -157,11 +157,11 @@ bootstrap complete.
 next steps (run inside 'tmux new -s bench' so SSH disconnect does not kill the
 20-hour bench):
 
-  # 1. download the model (about 5-15 min on AWS bandwidth)
+  # 1. download the model (about 5-10 min on AWS bandwidth, ~17.3 GiB)
   curl -L --fail --retry 5 -C - \\
-      -o "${MODELS_DIR}/mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf" \\
-      "https://huggingface.co/TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF/resolve/main/mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf"
-  # expected sha256: 9193684683657e90707087bd1ed19fd0b277ab66358d19edeadc26d6fdec4f53
+      -o "${MODELS_DIR}/Qwen3-30B-A3B-Q4_K_M.gguf" \\
+      "https://huggingface.co/unsloth/Qwen3-30B-A3B-GGUF/resolve/main/Qwen3-30B-A3B-Q4_K_M.gguf"
+  # expected sha256: 9f1a24700a339b09c06009b729b5c809e0b64c213b8af5b711b3dbdfd0c5ba48
 
   # 2. build llama.cpp (~5-10 min on c7a's 192 cores)
   cd "${LLAMA_DIR}"
@@ -171,10 +171,10 @@ next steps (run inside 'tmux new -s bench' so SSH disconnect does not kill the
   ./main/scripts/test.sh
 
   # 4. smoke run (~5 min, validates harness, no perf)
-  ./main/scripts/bench.sh --model ~/models/mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf --smoke
+  ./main/scripts/bench.sh --model ~/models/Qwen3-30B-A3B-Q4_K_M.gguf --smoke
 
   # 5. real Stage 0 (~15-20 hr — keep tmux attached or detach with C-b d)
-  ./main/scripts/bench.sh --model ~/models/mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf
+  ./main/scripts/bench.sh --model ~/models/Qwen3-30B-A3B-Q4_K_M.gguf
 
   # 6. analyze
   ./main/scripts/analyze.py main/results/baseline-<timestamp>/
