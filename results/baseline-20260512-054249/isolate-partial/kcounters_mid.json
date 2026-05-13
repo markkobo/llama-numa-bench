@@ -1,0 +1,26 @@
+{
+  "schema_version": "1",
+  "captured_at_utc": "2026-05-12T15:32:55Z",
+  "monotonic_ns": 3182260000000,
+  "loadavg": { "1m": 69.70, "5m": 19.29, "15m": 6.78 },
+  "vmstat": {
+    "pgmigrate_success": 334905,
+    "pgmigrate_fail": 2,
+    "numa_pte_updates": 6101969,
+    "numa_huge_pte_updates": 564,
+    "numa_hint_faults": 2850007,
+    "numa_hint_faults_local": 2478740,
+    "numa_pages_migrated": 334905,
+    "thp_split_pmd": 0,
+    "thp_split_page": 0,
+    "thp_collapse_alloc": 0,
+    "pgfault": 15273079,
+    "pgmajfault": 8610
+  },
+  "process": {
+    "pid": 19444,
+    "voluntary_ctxt_switches": 346,
+    "nonvoluntary_ctxt_switches": 7233,
+    "vmrss_kb": 29724012
+  }
+}

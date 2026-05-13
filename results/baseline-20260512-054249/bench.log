@@ -1,0 +1,7 @@
+==> results in: /home/rding/llama.cpp/main/results/baseline-20260512-054249
+==> running variants: baseline distribute isolate interleave bind0 
+==> reps=1000, pp=512, tg=128, perf=1, numactl=1, instrument=1
+
+  [baseline] already done (/home/rding/llama.cpp/main/results/baseline-20260512-054249/baseline/bench.jsonl), skipping. Delete to rerun.
+  [distribute] already done (/home/rding/llama.cpp/main/results/baseline-20260512-054249/distribute/bench.jsonl), skipping. Delete to rerun.
+  [isolate] starting (logs: /home/rding/llama.cpp/main/results/baseline-20260512-054249/isolate/)

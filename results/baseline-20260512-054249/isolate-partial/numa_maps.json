@@ -1,0 +1,346 @@
+{
+  "schema_version": "1",
+  "captured_at_utc": "2026-05-12T15:32:55Z",
+  "pid": 19444,
+  "model_path_resolved": "/home/rding/models/Qwen3-30B-A3B-Q4_K_M.gguf",
+  "page_size_bytes": 4096,
+  "totals": {
+    "pages": 7431001,
+    "bytes": 30437380096,
+    "per_node_pages": {
+      "1": 7344472,
+      "0": 86529
+    },
+    "per_node_bytes": {
+      "1": 30082957312,
+      "0": 354422784
+    }
+  },
+  "by_category": {
+    "code_libs": {
+      "n_vmas": 71,
+      "pages": 2933,
+      "bytes": 12013568,
+      "per_node_pages": {
+        "1": 1924,
+        "0": 1009
+      },
+      "per_node_bytes": {
+        "1": 7880704,
+        "0": 4132864
+      },
+      "migrated_pages": 0,
+      "huge_pages": 0,
+      "dirty_pages": 172,
+      "top_vmas": [
+        {
+          "address": "0x7aacb0a28000",
+          "policy": "default",
+          "per_node": {
+            "0": 323,
+            "1": 5
+          },
+          "file": "/usr/lib/x86_64-linux-gnu/libc.so.6",
+          "mapped": 328,
+          "mapmax": 73,
+          "active": 320,
+          "kernelpagesize_kB": 4,
+          "category": "code_libs"
+        },
+        {
+          "address": "0x7aacb1289000",
+          "policy": "default",
+          "per_node": {
+            "1": 247
+          },
+          "file": "/home/rding/llama.cpp/build/bin/libllama.so.0.0.9112",
+          "mapped": 247,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "code_libs"
+        },
+        {
+          "address": "0x7aacb0e9d000",
+          "policy": "default",
+          "per_node": {
+            "0": 22,
+            "1": 201
+          },
+          "file": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33",
+          "mapped": 223,
+          "mapmax": 6,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "code_libs"
+        },
+        {
+          "address": "0x7aacb16ad000",
+          "policy": "default",
+          "per_node": {
+            "1": 214
+          },
+          "file": "/home/rding/llama.cpp/build/bin/libllama-common.so.0.0.9112",
+          "mapped": 214,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "code_libs"
+        },
+        {
+          "address": "0x7aacb0261000",
+          "policy": "default",
+          "per_node": {
+            "1": 194
+          },
+          "file": "/home/rding/llama.cpp/build/bin/libggml-cpu.so.0.11.1",
+          "mapped": 194,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "code_libs"
+        },
+        {
+          "address": "0x7aacb0400000",
+          "policy": "default",
+          "per_node": {
+            "0": 179
+          },
+          "file": "/usr/lib/x86_64-linux-gnu/libcrypto.so.3",
+          "mapped": 179,
+          "mapmax": 21,
+          "active": 72,
+          "kernelpagesize_kB": 4,
+          "category": "code_libs"
+        },
+        {
+          "address": "0x7aacb1600000",
+          "policy": "default",
+          "per_node": {
+            "1": 172
+          },
+          "file": "/home/rding/llama.cpp/build/bin/libllama-common.so.0.0.9112",
+          "mapped": 172,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "code_libs"
+        },
+        {
+          "address": "0x7aacb0e00000",
+          "policy": "default",
+          "per_node": {
+            "1": 157
+          },
+          "file": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33",
+          "mapped": 157,
+          "mapmax": 6,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "code_libs"
+        },
+        {
+          "address": "0x7aacb1200000",
+          "policy": "default",
+          "per_node": {
+            "1": 137
+          },
+          "file": "/home/rding/llama.cpp/build/bin/libllama.so.0.0.9112",
+          "mapped": 137,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "code_libs"
+        },
+        {
+          "address": "0x7aacb1551000",
+          "policy": "default",
+          "per_node": {
+            "1": 124
+          },
+          "file": "/home/rding/llama.cpp/build/bin/libggml-base.so.0.11.1",
+          "mapped": 124,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "code_libs"
+        }
+      ]
+    },
+    "anon": {
+      "n_vmas": 267,
+      "pages": 3489305,
+      "bytes": 14292193280,
+      "per_node_pages": {
+        "1": 3489236,
+        "0": 69
+      },
+      "per_node_bytes": {
+        "1": 14291910656,
+        "0": 282624
+      },
+      "migrated_pages": 0,
+      "huge_pages": 0,
+      "dirty_pages": 3489305,
+      "top_vmas": [
+        {
+          "address": "0x7aa4fc96d000",
+          "policy": "default",
+          "per_node": {
+            "1": 3459078
+          },
+          "anon": 3459078,
+          "dirty": 3459078,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "anon"
+        },
+        {
+          "address": "0x7aacaad05000",
+          "policy": "default",
+          "per_node": {
+            "1": 16386
+          },
+          "anon": 16386,
+          "dirty": 16386,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "anon"
+        },
+        {
+          "address": "0x5f99393aa000",
+          "policy": "default",
+          "per_node": {
+            "1": 11037
+          },
+          "anon": 11037,
+          "dirty": 11037,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "anon"
+        },
+        {
+          "address": "0x7aacaeeec000",
+          "policy": "default",
+          "per_node": {
+            "1": 1484
+          },
+          "anon": 1484,
+          "dirty": 1484,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "anon"
+        },
+        {
+          "address": "0x7aacb037b000",
+          "policy": "default",
+          "per_node": {
+            "1": 131
+          },
+          "anon": 131,
+          "dirty": 131,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "anon"
+        },
+        {
+          "address": "0x7aacb1a6b000",
+          "policy": "default",
+          "per_node": {
+            "1": 16
+          },
+          "anon": 16,
+          "dirty": 16,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "anon"
+        },
+        {
+          "address": "0x7ffe70fc8000",
+          "policy": "default",
+          "per_node": {
+            "1": 15
+          },
+          "anon": 15,
+          "dirty": 15,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "anon"
+        },
+        {
+          "address": "0x7aa4c00f5000",
+          "policy": "default",
+          "per_node": {
+            "1": 8
+          },
+          "anon": 8,
+          "dirty": 8,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "anon"
+        },
+        {
+          "address": "0x7aa4c08f6000",
+          "policy": "default",
+          "per_node": {
+            "1": 8
+          },
+          "anon": 8,
+          "dirty": 8,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "anon"
+        },
+        {
+          "address": "0x7aa4c10f7000",
+          "policy": "default",
+          "per_node": {
+            "1": 8
+          },
+          "anon": 8,
+          "dirty": 8,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "anon"
+        }
+      ]
+    },
+    "model_mmap": {
+      "n_vmas": 2,
+      "pages": 3938763,
+      "bytes": 16133173248,
+      "per_node_pages": {
+        "0": 85451,
+        "1": 3853312
+      },
+      "per_node_bytes": {
+        "0": 350007296,
+        "1": 15783165952
+      },
+      "migrated_pages": 0,
+      "huge_pages": 0,
+      "dirty_pages": 0,
+      "top_vmas": [
+        {
+          "address": "0x7aa85d1b1000",
+          "policy": "default",
+          "per_node": {
+            "0": 85450,
+            "1": 3853312
+          },
+          "file": "/home/rding/models/Qwen3-30B-A3B-Q4_K_M.gguf",
+          "mapped": 3938762,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "model_mmap"
+        },
+        {
+          "address": "0x7aacaed09000",
+          "policy": "default",
+          "per_node": {
+            "0": 1
+          },
+          "file": "/home/rding/models/Qwen3-30B-A3B-Q4_K_M.gguf",
+          "mapped": 1,
+          "active": 0,
+          "kernelpagesize_kB": 4,
+          "category": "model_mmap"
+        }
+      ]
+    }
+  }
+}
