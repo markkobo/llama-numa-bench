@@ -1,0 +1,69 @@
+
+=== run [mmap] ===
+$ /home/rding/llama.cpp/build/bin/llama-cli -m /home/rding/models/Qwen3-30B-A3B-Q4_K_M.gguf -p 32 -n 8 -no-cnv
+pid=14597, waiting for RSS to stabilize (>= 8000 MiB, 3 polls × 0.5s, timeout 300.0s)...
+  RSS stable at 34931.7 MiB; freezing process with SIGSTOP for snapshot.
+
+--- breakdown [mmap] (total RSS 34931.7 MiB) ---
+category         #VMA      RSS MiB    %RSS   anon MiB   priv MiB
+model_mmap          2      17583.4   50.3%        0.0    17583.4
+anon              270      17282.2   49.5%    17282.2    17282.2
+code_libs          76         13.2    0.0%        0.7        7.7
+special             5         53.0    0.2%       53.0       53.0
+
+--- NUMA placement [mmap] (pages, page_size=4096) ---
+category                 N0           N1
+model_mmap          4501338            0
+anon                3589959       834278
+code_libs              2890          492
+special               13561            0
+
+--- top model_mmap VMAs [mmap] ---
+     17583.3 MiB  r--s  /home/rding/models/Qwen3-30B-A3B-Q4_K_M.gguf
+         0.0 MiB  r--s  /home/rding/models/Qwen3-30B-A3B-Q4_K_M.gguf
+
+--- top anon VMAs [mmap] ---
+  rss    17278.2 MiB / vsize    17669.8 MiB  rw-p  0x72304183a000-0x723491e00000
+  rss        0.5 MiB / vsize        0.5 MiB  rw-p  0x7238ea97b000-0x7238eaa00000
+  rss        0.0 MiB / vsize        0.2 MiB  rw-p  0x7238ec045000-0x7238ec070000
+  rss        0.0 MiB / vsize        0.0 MiB  rw-p  0x7238ebae3000-0x7238ebaec000
+  rss        0.0 MiB / vsize        8.0 MiB  rw-p  0x723003fc0000-0x7230047c0000
+  rss        0.0 MiB / vsize        8.0 MiB  rw-p  0x723005fc4000-0x7230067c4000
+  rss        0.0 MiB / vsize        8.0 MiB  rw-p  0x7230067c5000-0x723006fc5000
+  rss        0.0 MiB / vsize        8.0 MiB  rw-p  0x723006fc6000-0x7230077c6000
+
+=== run [no-mmap] ===
+$ /home/rding/llama.cpp/build/bin/llama-cli -m /home/rding/models/Qwen3-30B-A3B-Q4_K_M.gguf --no-mmap -p 32 -n 8 -no-cnv
+pid=15201, waiting for RSS to stabilize (>= 8000 MiB, 3 polls × 0.5s, timeout 300.0s)...
+  RSS stable at 21621.6 MiB; freezing process with SIGSTOP for snapshot.
+
+--- breakdown [no-mmap] (total RSS 21621.6 MiB) ---
+category         #VMA      RSS MiB    %RSS   anon MiB   priv MiB
+anon              528      21550.5   99.7%    21550.5    21550.5
+code_libs          76         14.2    0.1%        0.7        8.8
+special             5         56.8    0.3%       56.8       56.8
+
+--- NUMA placement [no-mmap] (pages, page_size=4096) ---
+category                 N0           N1
+anon                 496107      5020829
+code_libs              2972          672
+special                   0        14551
+
+--- top anon VMAs [no-mmap] ---
+  rss    21541.9 MiB / vsize    21999.9 MiB  rw-p  0x711839214000-0x711d98202000
+  rss        0.5 MiB / vsize        0.5 MiB  rw-p  0x711da0d7b000-0x711da0e00000
+  rss        0.5 MiB / vsize       20.0 MiB  rw-p  0x711d9e3fb000-0x711d9f7fe000
+  rss        0.1 MiB / vsize        8.0 MiB  rw-p  0x711d9f7ff000-0x711d9ffff000
+  rss        0.1 MiB / vsize        0.2 MiB  rw-p  0x711da2445000-0x711da2477000
+  rss        0.0 MiB / vsize        8.0 MiB  rw-p  0x7117b7788000-0x7117b7f88000
+  rss        0.0 MiB / vsize        8.0 MiB  rw-p  0x7117b7f89000-0x7117b8789000
+  rss        0.0 MiB / vsize        8.0 MiB  rw-p  0x7117b878a000-0x7117b8f8a000
+
+=== summary: mmap vs no-mmap ===
+  mmap total RSS:       34931.7 MiB
+  no-mmap total RSS:    21621.6 MiB
+  model_mmap   mmap=   17583.4 MiB  no-mmap=       0.0 MiB  delta=-17583.4 MiB
+  anon         mmap=   17282.2 MiB  no-mmap=   21550.5 MiB  delta=+4268.4 MiB
+
+interpretation:
+  default mmap: roughly balanced (model_mmap=17583 MiB, anon=17282 MiB). Buffer-allocator mbind() captures the activation/KV share; mmap region needs its own pass for weights.

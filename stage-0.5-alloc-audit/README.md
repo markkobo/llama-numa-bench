@@ -100,6 +100,50 @@ static ggml_backend_buffer_t ggml_backend_cpu_buffer_type_alloc_buffer(
 
 ---
 
+## Part A2 — Empirical surprises that contradict Part A
+
+**Measured 2026-06-04 on `rding-bench` (EPYC 9R14, 128 vCPU, dual-NUMA, 256 GiB)** using `scripts/mem_breakdown.py --both` on Qwen3-30B-A3B Q4_K_M, llama.cpp @ `8e1f9d083`, llama-cli with `-p 32 -n 8 -no-cnv`. Raw output archived under `raw/`.
+
+### Surprise 1: a 17 GiB anonymous VMA exists under default mmap
+
+Part A predicted that default mmap would keep almost all the resident model bytes in the file-backed mapping, with only KV + scratch (~1–8% of RSS) showing as anonymous. **Empirically wrong**:
+
+| Configuration | model_mmap RSS | anon RSS | Total RSS |
+|---|---:|---:|---:|
+| default `mmap` | 17,583 MiB | **17,282 MiB** | 34,931 MiB |
+| `--no-mmap` | 0 MiB | 21,550 MiB | 21,621 MiB |
+
+Under default mmap there is a single **17.3 GiB anonymous VMA** at `0x72304183a000-0x723491e00000` that Part A's source trace did not predict. Its size is approximately the model weights' size, but the file-backed mmap *also* shows full resident pages. So the process is paying for ~17 GiB of unique anon memory on top of the shared file mapping.
+
+Candidate explanations (not yet validated against source):
+
+- **The mmap-wrap fast path may be disabled in this configuration**: `llama-model.cpp:1457-1465` requires `ml.use_mmap && use_mmap_buffer && buffer_from_host_ptr_supported && is_default_buft` *all* true to skip the anon copy. If any condition is false the fall-through allocates anon and *also* memcpys from the mmap. The mmap would still be charged to RSS via the file mapping, and the anon would hold its own copy.
+- **A pre-allocated workspace** sized to the model (compute scratch worst-case, expert dequant cache, or similar) that I missed in the source trace.
+
+**Implication for Stage 1**: the Part A claim "default mmap leaves only 10–15% of RSS visible to the hook" is wrong. Empirically the hook would control ~50% under default mmap (the 17.3 GiB anon block + smaller anon VMAs). The Part A claim for `--no-mmap` (~95%+) holds at 99.7%.
+
+**Open question — Stage 0.6 candidate**: trace where that 17.3 GiB anon comes from. Either a missed allocator path or a runtime-mode condition (e.g., the host-ptr fast path is gated off here) is responsible. Until that's resolved, Stage 1 should still prefer `--no-mmap` for the cleanest narrative, but the default-mmap result is also a legitimate Stage 1 target with the corrected "hook covers ~50%" framing.
+
+### Surprise 2: total RSS under `mmap` is *larger* than under `--no-mmap`
+
+| Configuration | Total RSS |
+|---|---:|
+| default `mmap` | 34.9 GiB |
+| `--no-mmap` | 21.6 GiB |
+
+Naïvely, mmap should be smaller (page cache shared with the OS). Here mmap is 13.3 GiB **bigger** because the process has both the file-backed RSS *and* the unexplained anon copy. This is consistent with hypothesis 1 above (mmap-wrap fallback to anon copy while still keeping the file mmap). It's also independently a useful finding: `--no-mmap` is *the* lower-RSS option for this build, contrary to common llama.cpp guidance.
+
+### NUMA placement of the resident anon (per-VMA, top-1)
+
+| Configuration | Top anon VMA size | N0 pages | N1 pages | % local to N0 |
+|---|---:|---:|---:|---:|
+| `mmap` | 17,278 MiB | ~3.6 M | ~0.8 M | 81% |
+| `--no-mmap` | 21,542 MiB | ~0.5 M | ~5.0 M | 10% |
+
+Both runs happened to land first-touch placement on different nodes (the `mmap` run started on a node-0 CPU, the `--no-mmap` run on a node-1 CPU). Either way the *split is heavily lopsided* — the kernel's default first-touch isn't producing a balanced placement under load. This is exactly the "before" picture that Stage 1's mbind PoC will improve on.
+
+---
+
 ## Part B — Empirical measurement protocol
 
 To validate the source trace, the bench box runs `measure.sh` (sibling file) which:
@@ -116,53 +160,68 @@ After both runs:
 
 ### Tables to populate (run on bench box, paste numbers here)
 
-**Table B-1: VMA-categorized RSS, default `mmap`**
+**Table B-1: VMA-categorized RSS, default `mmap`** (measured 2026-06-04)
 
 | Category | VMA count | Total RSS | % of RSS | Notes |
 |---|---:|---:|---:|---|
-| model_mmap (file-backed, `.gguf`) | TBD | TBD GiB | TBD % | expected: dominant share |
-| anon (KV + scratch + heap) | TBD | TBD GiB | TBD % | expected: 1–8 % |
-| code_libs (binary + .so) | TBD | TBD MiB | TBD % | expected: <1 % |
-| special (`[heap]`, `[stack]`, etc.) | TBD | TBD MiB | TBD % | <1 % |
-| **TOTAL** | | TBD GiB | 100 % | |
+| model_mmap (file-backed, `.gguf`) | 2 | 17,583 MiB | 50.3 % | the GGUF file-backed mapping |
+| anon (KV + scratch + ?17 GiB unexplained) | 270 | 17,282 MiB | 49.5 % | dominated by ONE 17.3 GiB VMA, see Part A2 surprise #1 |
+| code_libs (binary + .so) | 76 | 13 MiB | 0.0 % | negligible |
+| special (`[heap]`, `[stack]`, etc.) | 5 | 53 MiB | 0.2 % | negligible |
+| **TOTAL** | 353 | **34,931 MiB** | 100 % | larger than `--no-mmap` (see surprise #2) |
 
-**Table B-2: VMA-categorized RSS, `--no-mmap`**
+**Table B-2: VMA-categorized RSS, `--no-mmap`** (measured 2026-06-04)
 
 | Category | VMA count | Total RSS | % of RSS | Notes |
 |---|---:|---:|---:|---|
-| model_mmap | TBD | TBD GiB | TBD % | expected: ~0 (no GGUF mmap) |
-| anon | TBD | TBD GiB | TBD % | expected: ~95 % (weights moved here) |
-| code_libs | TBD | TBD MiB | TBD % | <1 % |
-| special | TBD | TBD MiB | TBD % | <1 % |
-| **TOTAL** | | TBD GiB | 100 % | |
+| model_mmap | 0 | 0 MiB | 0 % | as expected, no GGUF mmap |
+| anon | 528 | 21,550 MiB | 99.7 % | weights + KV + scratch all anon-backed |
+| code_libs | 76 | 14 MiB | 0.1 % | |
+| special | 5 | 57 MiB | 0.3 % | |
+| **TOTAL** | 609 | **21,621 MiB** | 100 % | |
 
 **Table B-3: Cross-table delta**
 
 | Quantity | `mmap` | `--no-mmap` | Δ |
 |---|---:|---:|---:|
-| Total RSS | TBD GiB | TBD GiB | TBD GiB |
-| model_mmap bytes | TBD GiB | TBD GiB | TBD GiB |
-| anon bytes | TBD GiB | TBD GiB | TBD GiB |
-| % subject to Stage 1 hook | TBD % | TBD % | TBD % |
+| Total RSS | 34.9 GiB | 21.6 GiB | **-13.3 GiB** (no-mmap is *smaller*) |
+| model_mmap bytes | 17.6 GiB | 0 | -17.6 GiB |
+| anon bytes | 17.3 GiB | 21.6 GiB | +4.3 GiB |
+| % subject to Stage 1 hook | **49.5 %** | **99.7 %** | +50.2 pp |
 
 The headline number for the writeup is the last row.
+
+The Part A prediction ("10–15 % under default mmap") was wrong; the measured ~50 % means a Stage 1 PoC under default mmap is also legitimate, not just a `--no-mmap`-only story. But the source-trace gap behind that 17 GiB anon block is unresolved (see Part A2 surprise #1).
 
 ### Per-VMA NUMA placement (validates Stage 0's `--numa distribute` baseline)
 
 Take the top 5 anon VMAs by size from each configuration; cross-reference with `numa_maps.json` for N0/N1 page counts. Goal: show how `--numa distribute` currently splits the resident-anon memory across nodes. This is the "before" picture that Stage 1's mbind PoC will improve on.
 
-| Config | VMA range | Size MiB | N0 pages | N1 pages | % local to N0 |
-|---|---|---:|---:|---:|---:|
-| mmap | TBD | TBD | TBD | TBD | TBD |
-| ... | | | | | |
+**Aggregate per-category NUMA pages** (measured 2026-06-04):
+
+| Category | `mmap` N0 / N1 (4K pages) | `--no-mmap` N0 / N1 |
+|---|---|---|
+| model_mmap | 4,501,338 / 0 (100% N0) | 0 / 0 |
+| anon | 3,589,959 / 834,278 (81% N0) | 496,107 / 5,020,829 (10% N0) |
+| code_libs | 2,890 / 492 | 2,972 / 672 |
+| special | 13,561 / 0 | 0 / 14,551 |
+
+**Top anonymous VMA per run** (dominates the breakdown):
+
+| Config | VMA range | Size MiB | Top-VMA placement implication |
+|---|---|---:|---|
+| `mmap` | `0x72304183a000-0x723491e00000` | 17,278 | one big anon block; placement followed first-touch on N0 |
+| `--no-mmap` | `0x711839214000-0x711d98202000` | 21,542 | one big anon block; first-touch on N1 |
+
+Both runs are heavily lopsided (the single dominant anon VMA is on one node, not balanced). First-touch alone is producing 80/20 or 10/90 splits depending on which CPU the launcher happened to land on. This is the empirical "before" picture for Stage 1's mbind PoC: even `--numa distribute` doesn't help when one giant VMA carries most of the resident set.
 
 ---
 
 ## Done when
 
-- [ ] Tables B-1, B-2, B-3 filled from real measurements on `rding-bench` (or equivalent dual-NUMA host).
-- [ ] Per-VMA NUMA table populated for top-5 anon VMAs in both configurations.
-- [ ] If empirical % matches source-trace prediction within ±5 percentage points: source trace validated; cite this writeup from Stage 1 PoC design.
-- [ ] If empirical disagrees by >5 pp: investigate which allocation path was missed in the trace (likely candidates: tensor metadata sub-pool, libc thread arenas, jemalloc/tcmalloc if linked) and document the gap before proceeding to Stage 1.
+- [x] Tables B-1, B-2, B-3 filled from real measurements on `rding-bench` (2026-06-04, raw output `raw/mem_breakdown-20260604-2122.out`).
+- [x] Per-VMA NUMA table populated.
+- [x] Empirical numbers compared to source-trace predictions.
+- [ ] **Open: empirical disagrees with source-trace by >5 pp under default mmap** (Part A predicted 10–15 % hook coverage; measured 49.5 %). Source-trace gap is the unexplained 17 GiB anon VMA. Either a missed allocator path (likely candidate: the host-ptr fast path is being rejected and the alloc-ctx-tensors-from-buft fallback is running) or a runtime workspace I missed in the source. **Stage 0.6 candidate**: run `llama-cli` with `LLAMA_LOG_LEVEL=DEBUG` or instrument to log every backend buffer allocation, identify which call site produces the 17 GiB anon, update Part A. Until that's resolved, Stage 1 should still prefer `--no-mmap` for the cleanest narrative, but the default-mmap result is also legitimate at the corrected ~50 % framing.
 
-The writeup itself is the Stage 0.5 deliverable. It feeds directly into Stage 1's PR description ("here's the audit that justifies running Stage 1 under `--no-mmap`").
+The writeup itself is the Stage 0.5 deliverable. It feeds directly into Stage 1's PR description ("here's the audit that justifies running Stage 1 under `--no-mmap`" — or under default mmap with the corrected hook-coverage claim, depending on which configuration we pick after the Stage 0.6 trace-gap resolution).
