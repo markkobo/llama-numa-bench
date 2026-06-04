@@ -104,7 +104,7 @@ static ggml_backend_buffer_t ggml_backend_cpu_buffer_type_alloc_buffer(
 
 **Measured 2026-06-04 on `rding-bench` (EPYC 9R14, 128 vCPU, dual-NUMA, 256 GiB)** using `scripts/mem_breakdown.py --both` on Qwen3-30B-A3B Q4_K_M, llama.cpp @ `8e1f9d083`, llama-cli with `-p 32 -n 8 -no-cnv`. Raw output archived under `raw/`.
 
-### Surprise 1: a 17 GiB anonymous VMA exists under default mmap
+### Surprise 1: a 17 GiB anonymous VMA exists under default mmap — explained: it's CPU_REPACK
 
 Part A predicted that default mmap would keep almost all the resident model bytes in the file-backed mapping, with only KV + scratch (~1–8% of RSS) showing as anonymous. **Empirically wrong**:
 
@@ -113,16 +113,65 @@ Part A predicted that default mmap would keep almost all the resident model byte
 | default `mmap` | 17,583 MiB | **17,282 MiB** | 34,931 MiB |
 | `--no-mmap` | 0 MiB | 21,550 MiB | 21,621 MiB |
 
-Under default mmap there is a single **17.3 GiB anonymous VMA** at `0x72304183a000-0x723491e00000` that Part A's source trace did not predict. Its size is approximately the model weights' size, but the file-backed mmap *also* shows full resident pages. So the process is paying for ~17 GiB of unique anon memory on top of the shared file mapping.
+The 17.3 GiB anon block under default mmap is **CPU_REPACK** — a llama.cpp facility that copies eligible tensors into a more cache-friendly anonymous layout at load time, and then computes against those repacked copies. `llama-cli --verbose` makes it visible:
 
-Candidate explanations (not yet validated against source):
+```
+load_tensors:   CPU_Mapped model buffer size = 17583.34 MiB   ← file-backed mmap (the GGUF)
+load_tensors:   CPU_REPACK model buffer size = 13432.50 MiB   ← anonymous, repacked copies of 290 tensors
+llama_kv_cache:        CPU KV buffer size    =  3840.00 MiB   ← anonymous KV cache
+sched_reserve:         CPU compute buffer    =   377.25 MiB   ← anonymous compute scratch
+```
 
-- **The mmap-wrap fast path may be disabled in this configuration**: `llama-model.cpp:1457-1465` requires `ml.use_mmap && use_mmap_buffer && buffer_from_host_ptr_supported && is_default_buft` *all* true to skip the anon copy. If any condition is false the fall-through allocates anon and *also* memcpys from the mmap. The mmap would still be charged to RSS via the file mapping, and the anon would hold its own copy.
-- **A pre-allocated workspace** sized to the model (compute scratch worst-case, expert dequant cache, or similar) that I missed in the source trace.
+13,432 + 3,840 + 377 + small_misc ≈ 17,650 MiB — matches the empirical 17,282 MiB anon. (Note: 291 tensors *can't* use CPU_REPACK — those stay in the mmap'd file and are addressed via the file-backed VMA; this is why model_mmap RSS is the full 17.6 GiB even though only ~4 GiB's worth of tensors actively need it.)
 
-**Implication for Stage 1**: the Part A claim "default mmap leaves only 10–15% of RSS visible to the hook" is wrong. Empirically the hook would control ~50% under default mmap (the 17.3 GiB anon block + smaller anon VMAs). The Part A claim for `--no-mmap` (~95%+) holds at 99.7%.
+### Surprise 1b: does the Stage 1 hook cover CPU_REPACK?
 
-**Open question — Stage 0.6 candidate**: trace where that 17.3 GiB anon comes from. Either a missed allocator path or a runtime-mode condition (e.g., the host-ptr fast path is gated off here) is responsible. Until that's resolved, Stage 1 should still prefer `--no-mmap` for the cleanest narrative, but the default-mmap result is also a legitimate Stage 1 target with the corrected "hook covers ~50%" framing.
+**Yes, fully.** CPU_REPACK is a separate `ggml_backend_buffer_type` (registered at `ggml/src/ggml-cpu/repack.cpp:4821-4836`), but its `alloc_buffer` callback at `ggml/src/ggml-cpu/repack.cpp:4751-4764` does NOT call its own allocator. It delegates to the regular CPU buffer type:
+
+```c
+// ggml/src/ggml-cpu/repack.cpp:4752
+static ggml_backend_buffer_t ggml_backend_cpu_repack_buffer_type_alloc_buffer(
+    ggml_backend_buffer_type_t buft, size_t size) {
+    ggml_backend_buffer_t buffer = ggml_backend_buft_alloc_buffer(
+        ggml_backend_cpu_buffer_type(), size);   // ← routes back to the CPU buft we hook
+    ...
+}
+```
+
+`ggml_backend_buft_alloc_buffer(ggml_backend_cpu_buffer_type(), ...)` dispatches to `ggml_backend_cpu_buffer_type_alloc_buffer` at `ggml-backend.cpp:2305` (the Stage 1 hook), which calls `ggml_aligned_malloc` at line 2306. **The Stage 1 hook attaches `mbind` directly to the CPU_REPACK 13.4 GiB allocation.**
+
+Updated source-trace verdict for the audit table:
+
+| Memory class | Default mmap | `--no-mmap` | Visible to Stage 1 hook? | Evidence |
+|---|---|---|---|---|
+| Model weights (repackable, 290 tensors) | mmap'd file (~13 GiB) + **CPU_REPACK anon (13.4 GiB)** | CPU_REPACK anon only (13.4 GiB) | hook covers CPU_REPACK copy only (`--mmap`); covers everything (`--no-mmap`) | `repack.cpp:4752`, `ggml-backend.cpp:2305` |
+| Model weights (non-repackable, 291 tensors) | mmap'd file (~4 GiB), used in-place | anon (3.9 GiB), used in place | **NO** (mmap) / **YES** (--no-mmap) | `llama-model.cpp:1457-1488` |
+
+### Implication for Stage 1: the compute-active memory story
+
+The most useful denominator isn't "total RSS" but **compute-active memory** — bytes actually read during inference. Repacked-source pages in the mmap'd file are dormant after load:
+
+| Configuration | Compute-active bytes | Hook covers | Ratio |
+|---|---:|---:|---:|
+| default `mmap` | 13.4 (repack) + 3.84 (KV) + 0.4 (scratch) + ~4 (non-repackable mmap'd) = **~21.6 GiB** | 13.4 + 3.84 + 0.4 = **17.6 GiB** | **~82%** |
+| `--no-mmap` | 13.4 (repack) + 3.9 (non-repackable anon) + 3.84 (KV) + 0.4 (scratch) = **21.6 GiB** | all of it = **21.6 GiB** | **~100%** |
+
+So either configuration is a legitimate Stage 1 PoC target. Under default mmap, the hook controls ~82% of compute-active memory; under `--no-mmap`, ~100%. The original Part A worry ("hook covers only 10–15%") was wrong; the actual under-mmap coverage of *active* memory is large.
+
+### Surprise 2: total RSS under `mmap` is *larger* than under `--no-mmap`
+
+| Configuration | Total RSS |
+|---|---:|
+| default `mmap` | 34.9 GiB |
+| `--no-mmap` | 21.6 GiB |
+
+Now explainable. Under default mmap, the OS keeps the entire 17.5 GiB GGUF in page cache (counted in process RSS via the file mapping) *and* the process holds the 13.4 GiB CPU_REPACK anon copy of the 290 repackable tensors. The mmap'd source pages for the repackable subset are essentially **dead weight** after the repacking pass — they're never read again during inference.
+
+This is independently a useful finding: for this build + this model, **default mmap costs ~13 GiB of "wasted" RAM** vs `--no-mmap`. Common llama.cpp advice favors mmap for fast load and shared page cache; that advice doesn't account for the CPU_REPACK duplication.
+
+### Stage 2 implication
+
+A clean Stage 2 design could move the `mbind` logic from `ggml_backend_cpu_buffer_type_alloc_buffer` to `ggml_aligned_malloc` directly (`ggml.c:331`). That would automatically pin every `ggml_aligned_malloc` caller — including CPU_REPACK, KV cache, compute scratch, tensor metadata pool — through a single touchpoint. Worth keeping in mind when designing 2c (the allocator-policy PR); the relocated hook covers more by construction and avoids any future "we forgot to hook this buffer type" bug.
 
 ### Surprise 2: total RSS under `mmap` is *larger* than under `--no-mmap`
 
@@ -222,6 +271,11 @@ Both runs are heavily lopsided (the single dominant anon VMA is on one node, not
 - [x] Tables B-1, B-2, B-3 filled from real measurements on `rding-bench` (2026-06-04, raw output `raw/mem_breakdown-20260604-2122.out`).
 - [x] Per-VMA NUMA table populated.
 - [x] Empirical numbers compared to source-trace predictions.
-- [ ] **Open: empirical disagrees with source-trace by >5 pp under default mmap** (Part A predicted 10–15 % hook coverage; measured 49.5 %). Source-trace gap is the unexplained 17 GiB anon VMA. Either a missed allocator path (likely candidate: the host-ptr fast path is being rejected and the alloc-ctx-tensors-from-buft fallback is running) or a runtime workspace I missed in the source. **Stage 0.6 candidate**: run `llama-cli` with `LLAMA_LOG_LEVEL=DEBUG` or instrument to log every backend buffer allocation, identify which call site produces the 17 GiB anon, update Part A. Until that's resolved, Stage 1 should still prefer `--no-mmap` for the cleanest narrative, but the default-mmap result is also legitimate at the corrected ~50 % framing.
+- [x] Source-trace gap resolved 2026-06-04: the 17 GiB anon under default mmap is CPU_REPACK (`ggml/src/ggml-cpu/repack.cpp`). CPU_REPACK delegates its allocator to the regular CPU buffer type at `repack.cpp:4752`, so the Stage 1 hook covers it. Part A2 above carries the full explanation and updated table.
 
-The writeup itself is the Stage 0.5 deliverable. It feeds directly into Stage 1's PR description ("here's the audit that justifies running Stage 1 under `--no-mmap`" — or under default mmap with the corrected hook-coverage claim, depending on which configuration we pick after the Stage 0.6 trace-gap resolution).
+The writeup is the Stage 0.5 deliverable. Both Stage 1 PoC configurations are legitimate:
+
+- **`--no-mmap`** — hook covers ~100% of compute-active memory. Cleanest narrative. Pays ~13 GiB more memory vs default mmap? Actually no — `--no-mmap` is *smaller* total RSS (21.6 GiB vs 34.9 GiB) because there's no CPU_REPACK duplication. **Recommended for the first PoC**.
+- **default mmap** — hook covers ~82% of compute-active memory (everything except the 4 GiB of non-repackable tensors used in-place from the file mmap). Acceptable, but the writeup must clarify that the 18% gap is non-repackable tensors held in mmap'd file pages. Use this only if the upstream community would prefer the default config.
+
+The Stage 1 PR description should cite this audit by URL.
